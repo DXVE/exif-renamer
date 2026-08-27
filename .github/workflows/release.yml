@@ -1,0 +1,94 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # Windows-only: PyInstaller 不能跨平台, Linux 跑不出 Windows exe
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: 设置 Python
+        uses: actions/setup-python@v7
+        with:
+          # 本项目用 Python 3.14 (本地 venv 已验证)
+          python-version: '3.14'
+
+      - name: 生成 build 时间戳
+        # 写到 GITHUB_ENV, 后续 step 全部用 ${{ env.BUILD_TS }} 引用
+        # 用 [DateTime]::UtcNow 不依赖 runner 本地时区, 跨 runner 一致
+        # 中国无夏令时, 固定 +8h 偏移到北京时间; 改时区改这里就行
+        # 格式 yyyyMMdd-HHmmss
+        shell: pwsh
+        run: |
+          $ts = [DateTime]::UtcNow.AddHours(8).ToString('yyyyMMdd-HHmmss')
+          "BUILD_TS=$ts" | Add-Content -Path $env:GITHUB_ENV
+          Write-Host "BUILD_TS = $ts"
+
+      - name: 安装构建依赖
+        # 项目无 pyproject.toml, 走 requirements.txt + pyinstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: 打包源码 zip
+        # 文件名: <repo>-<ts>.zip
+        run: git archive --format=zip --output="${{ github.event.repository.name }}-${{ env.BUILD_TS }}.zip" HEAD
+
+      - name: PyInstaller 打包 exe
+        # 双 spec: exif_rename.spec (主) + exif_debugger.spec (调试)
+        # 各自独立 workpath 防止中间文件冲突, 共享 distpath
+        # 调试时本地单独跑一个也行: pyinstaller exif_rename.spec
+        env:
+          WM_BUILD_TAG: ${{ env.BUILD_TS }}
+        run: |
+          pyinstaller --workpath .pyi-build-rename --distpath .pyi-dist exif_rename.spec
+          pyinstaller --workpath .pyi-build-debugger --distpath .pyi-dist exif_debugger.spec
+
+      - name: 验证产物
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem '.pyi-dist\*.exe'
+          if ($files.Count -eq 0) {
+            Write-Error "未找到任何 .exe 产物，打包可能失败"
+            exit 1
+          }
+          $files | Select-Object Name, @{N='Size_MB';E={[Math]::Round($_.Length/1MB,2)}}, LastWriteTime |
+            Format-Table -AutoSize
+
+      - name: 清理同名 tag 的旧 release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          gh release view $tag --json name 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "发现旧 release, 正在删除..."
+            gh release delete $tag --yes
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "删除旧 release 失败, 请检查权限或网络"
+              exit 1
+            }
+            Write-Host "已删除旧 release: $tag"
+          } else {
+            Write-Host "无旧 release ($tag), 跳过清理"
+          }
+          # 确保步骤正常退出
+          $LASTEXITCODE = 0
+
+      - name: 上传源码 + exe 到 Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            ${{ github.event.repository.name }}-${{ env.BUILD_TS }}.zip
+            .pyi-dist/*.exe
+
