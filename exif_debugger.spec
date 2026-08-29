@@ -35,7 +35,7 @@ def build_exe(entry):
         bootloader_ignore_signals=False,
         strip=False,
         upx=False,
-        console=True,            # CLI 工具, 保留控制台
+        console=False,           # GUI 工具, 不带黑框
         disable_windowed_traceback=False,
         argv_emulation=False,
         target_arch=None,

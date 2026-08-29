@@ -5,7 +5,7 @@
 
 # Rename Tool · 文件批量重命名工具
 
-> 基于 EXIF 拍摄日期与自定义模板的媒体文件批量重命名工具。  
+> 一款基于 EXIF 拍摄日期与自定义命名模板的多格式文件批量重命名工具。  
 > 支持图片（含 RAW）、视频、音频等文件类型，全 GUI 交互，后台多线程处理。
 
 ---
@@ -19,22 +19,26 @@
 ## 程序截图
 
 <p align="center">
-  <img src="images/1.png" alt="主界面" width="60%"><br>
+  <img width="60%" alt="主界面" src="https://github.com/user-attachments/assets/7cdbf5ae-3a1d-469a-9ab5-d043bb6cf79b" />
+  <br>
   <sub style="color: #888;">主界面</sub>
 </p>
 
 <p align="center">
-  <img src="images/2.png" alt="占位符列表" width="60%"><br>
-  <sub style="color: #888;">命名占位符列表</sub>
+  <img width="60%" alt="占位符列表" src="https://github.com/user-attachments/assets/71cbe251-8cd7-4199-884f-c8a14ce5f4bb" />
+  <br>
+  <sub style="color: #888;">重命名占位符列表</sub>
 </p>
 
 <p align="center">
-  <img src="images/3.png" alt="确认弹窗" width="60%"><br>
-  <sub style="color: #888;">执行前确认弹窗</sub>
+  <img width="60%" alt="确认弹窗" src="https://github.com/user-attachments/assets/47aed996-f0bd-4bde-ab53-0aee7607e1f6" />
+  <br>
+  <sub style="color: #888;">执行前确认弹窗（支持右键菜单定位文件）</sub>
 </p>
 
 <p align="center">
-  <img src="images/4.png" alt="命名结果" width="60%"><br>
+  <img width="60%" alt="命名结果" src="https://github.com/user-attachments/assets/14baf43f-4472-499c-8c48-b9256e1173d5" />
+  <br>
   <sub style="color: #888;">重命名完成统计结果</sub>
 </p>
 
@@ -63,7 +67,7 @@
 
 如果你只是想使用工具，不需要修改源码，**推荐直接下载已打包好的 exe 文件**，无需安装 Python 环境以及依赖。
 
-1. 前往 [Releases 页面](https://github.com/DXVE/exif-rename-tool/releases)
+1. 前往 [Releases 页面](https://github.com/DXVE/rename-tool-exif/releases)
 2. 选择最新版本
 3. 下载以下编译好的文件：
    - **`rename_tool-<时间戳>.exe`** — 主程序（EXIF 批量重命名）
