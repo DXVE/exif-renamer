@@ -18,29 +18,21 @@
 
 ## 程序截图
 
-<p align="center">
-  <img width="60%" alt="主界面" src="https://github.com/user-attachments/assets/7cdbf5ae-3a1d-469a-9ab5-d043bb6cf79b" />
-  <br>
-  <sub style="color: #888;">主界面</sub>
-</p>
+<table align="center">
+  <tr>
+    <td align="center" width="20%"><img src="https://github.com/user-attachments/assets/7cdbf5ae-3a1d-469a-9ab5-d043bb6cf79b" alt="主界面" width="95%"></td>
+    <td align="center" width="20%"><img src="https://github.com/user-attachments/assets/71cbe251-8cd7-4199-884f-c8a14ce5f4bb" alt="占位符列表" width="95%"></td>
+    <td align="center" width="20%"><img src="https://github.com/user-attachments/assets/47aed996-f0bd-4bde-ab53-0aee7607e1f6" alt="确认弹窗" width="95%"></td>
+    <td align="center" width="20%"><img src="https://github.com/user-attachments/assets/14baf43f-4472-499c-8c48-b9256e1173d5" alt="命名结果" width="95%"></td>
+  </tr>
+  <tr>
+    <td align="center" width="20%"><sub style="color: #888;">主界面</sub></td>
+    <td align="center" width="20%"><sub style="color: #888;">占位符列表</sub></td>
+    <td align="center" width="20%"><sub style="color: #888;">执行前确认弹窗（支持右键菜单定位文件）</sub></td>
+    <td align="center" width="20%"><sub style="color: #888;">重命名完成统计结果</sub></td>
+  </tr>
 
-<p align="center">
-  <img width="60%" alt="占位符列表" src="https://github.com/user-attachments/assets/71cbe251-8cd7-4199-884f-c8a14ce5f4bb" />
-  <br>
-  <sub style="color: #888;">重命名占位符列表</sub>
-</p>
-
-<p align="center">
-  <img width="60%" alt="确认弹窗" src="https://github.com/user-attachments/assets/47aed996-f0bd-4bde-ab53-0aee7607e1f6" />
-  <br>
-  <sub style="color: #888;">执行前确认弹窗（支持右键菜单定位文件）</sub>
-</p>
-
-<p align="center">
-  <img width="60%" alt="命名结果" src="https://github.com/user-attachments/assets/14baf43f-4472-499c-8c48-b9256e1173d5" />
-  <br>
-  <sub style="color: #888;">重命名完成统计结果</sub>
-</p>
+</table>
 
 ---
 

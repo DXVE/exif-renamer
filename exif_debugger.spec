@@ -34,7 +34,8 @@ def build_exe(entry):
         debug=False,
         bootloader_ignore_signals=False,
         strip=False,
-        upx=False,
+        upx=True,                # UPX 压缩,缩短冷启动解压耗时(0.5-1.5s)
+        upx_exclude=['vcruntime140.dll', 'ucrtbase.dll'],  # 避免 UPX 误压系统 DLL 引发兼容问题
         console=False,           # GUI 工具, 不带黑框
         disable_windowed_traceback=False,
         argv_emulation=False,

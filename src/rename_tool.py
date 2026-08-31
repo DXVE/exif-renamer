@@ -64,13 +64,49 @@ for ext in CUSTOM_FILE_EXTS:
     EXT_TO_TYPE[ext] = "FILE"
 
 # 优先使用 exifread（支持 RAW/HEIC），回退到 PIL 的基础 EXIF 支持
-try:
-    import exifread
-    EXIFREAD_AVAILABLE = True
-    EXIFREAD_VERSION = getattr(exifread, '__version__', 'unknown')
-except ImportError:
-    EXIFREAD_AVAILABLE = False
-    EXIFREAD_VERSION = None
+# 改为 lazy import：模块顶层不导入，延后到 _boot_heavy_modules 后台线程中执行
+# 这样可以缩短冷启动时间，避免启动时阻塞主线程
+EXIFREAD_AVAILABLE = False
+EXIFREAD_VERSION = None
+_exifread_module = None  # 真正 import 后的模块引用
+
+
+def _ensure_exifread():
+    """惰性导入 exifread，调用方只需关心 EXIFREAD_AVAILABLE"""
+    global EXIFREAD_AVAILABLE, EXIFREAD_VERSION, _exifread_module
+    if _exifread_module is not None:
+        return _exifread_module
+    try:
+        import exifread as _er
+        _exifread_module = _er
+        EXIFREAD_AVAILABLE = True
+        EXIFREAD_VERSION = getattr(_er, '__version__', 'unknown')
+    except ImportError:
+        EXIFREAD_AVAILABLE = False
+        EXIFREAD_VERSION = None
+    return _exifread_module
+
+
+# PIL 也走 lazy 导入：模块级仅记录状态，真正 import 在后台线程中执行
+PIL_AVAILABLE = False
+_PIL_Image = None
+_PIL_TAGS = None
+
+
+def _ensure_pil():
+    """惰性导入 PIL，调用方只需关心 PIL_AVAILABLE"""
+    global PIL_AVAILABLE, _PIL_Image, _PIL_TAGS
+    if _PIL_Image is not None:
+        return _PIL_Image, _PIL_TAGS
+    try:
+        from PIL import Image
+        from PIL.ExifTags import TAGS
+        _PIL_Image = Image
+        _PIL_TAGS = TAGS
+        PIL_AVAILABLE = True
+    except ImportError:
+        PIL_AVAILABLE = False
+    return _PIL_Image, _PIL_TAGS
 
 # EXIF 日期常见编码格式清单（含带时区偏移的变体）
 DATE_FORMATS = [
@@ -172,9 +208,10 @@ def get_media_datetime(filepath: str, log_func=None) -> tuple[datetime, bool, st
         return result
 
     if EXIFREAD_AVAILABLE:
+        er = _ensure_exifread()
         try:
             with open(filepath, 'rb') as f:
-                tags = exifread.process_file(f, details=True)
+                tags = er.process_file(f, details=True)
             tag_priority = ['EXIF DateTimeOriginal', 'Image DateTime',
                             'EXIF DateTimeDigitized', 'EXIF DateTime',
                             'EXIF_DateTimeOriginal', 'Image_DateTime']
@@ -205,15 +242,8 @@ def get_media_datetime(filepath: str, log_func=None) -> tuple[datetime, bool, st
             if log_func:
                 log_func(f"[ExifRead] 异常: {e}", "WARNING")
 
-    PIL_AVAILABLE = False
-    try:
-        from PIL import Image
-        from PIL.ExifTags import TAGS
-        PIL_AVAILABLE = True
-    except ImportError:
-        pass
-
     if PIL_AVAILABLE:
+        Image, TAGS = _ensure_pil()
         try:
             img = Image.open(filepath)
             try:
@@ -995,6 +1025,14 @@ class RenameWorker(threading.Thread):
 
 class RenamerTool:
     def __init__(self):
+        # ===== 阶段1:骨架上屏（目标 < 200ms） =====
+        # 仅做最轻量的初始化：根窗口、标题、图标、字体、style、Splash 占位
+        # 立刻 update() 强制首帧上屏，让用户尽早看到窗口
+        self._boot_done = threading.Event()
+        self._boot_error = None
+        self._splash_frame = None
+        self._splash_label = None
+
         self.root = tk.Tk()
         self.root.title("EXIF Rename Tool · 文件批量重命名工具 · v1.0")
 
@@ -1042,6 +1080,7 @@ class RenamerTool:
         style.theme_use('xpnative')
         style.configure('.', font=('Microsoft YaHei', 9))
 
+        # 轻量 StringVar/BooleanVar 初始化（无 widget，开销极小）
         self.src_var = tk.StringVar(value=DEFAULT_SETTINGS['source_folder'])
         self.copy_var = tk.BooleanVar(value=DEFAULT_SETTINGS['copy_to_new'])
         self.target_var = tk.StringVar(value=DEFAULT_SETTINGS['target_folder'])
@@ -1059,8 +1098,69 @@ class RenamerTool:
         self.response_queue = queue.Queue()
         self.worker = None
 
+        # 显示 Splash 占位（位于主窗口中央的小条），立刻可见
+        self._show_splash("EXIF Rename Tool · 正在加载 EXIF 解析器...")
+
+        # ===== 阶段2:启动后台线程 import 重模块 =====
+        # _boot_heavy_modules 只做纯 Python import，不接触 Tk 任何对象
+        self._boot_thread = threading.Thread(
+            target=self._boot_heavy_modules, name="boot-heavy-modules", daemon=True
+        )
+        self._boot_thread.start()
+
+        # 首帧上屏
+        self.root.update()
+
+        # ===== 阶段3:由排程触发（轮询 _boot_done） =====
+        # _wait_for_boot 每 50ms 检查一次事件；完成后构建完整 widget
+        self.root.after(50, self._wait_for_boot)
+
+    # ---------- 分阶段启动辅助方法 ----------
+
+    def _show_splash(self, message: str):
+        """在主窗口中央显示 Splash 占位（不抢焦点、不阻塞交互）"""
+        if self._splash_frame is not None:
+            return
+        self._splash_frame = ttk.Frame(self.root, padding=20)
+        self._splash_frame.place(relx=0.5, rely=0.5, anchor="center")
+        self._splash_label = ttk.Label(
+            self._splash_frame, text=message, foreground="gray",
+            font=("Microsoft YaHei", 10)
+        )
+        self._splash_label.pack()
+
+    def _hide_splash(self):
+        """销毁 Splash 占位，准备被完整 widget 替换"""
+        if self._splash_frame is not None:
+            self._splash_frame.destroy()
+            self._splash_frame = None
+            self._splash_label = None
+
+    def _boot_heavy_modules(self):
+        """后台线程：惰性导入 exifread 与 PIL，失败也允许程序运行（走 PIL fallback）"""
+        try:
+            _ensure_exifread()
+            _ensure_pil()
+        except Exception as e:
+            # 不阻断主流程：标记 _boot_error 留给日志输出
+            self._boot_error = str(e)
+        finally:
+            # 无论成败，都必须 set，否则 _wait_for_boot 会永久 50ms 空转
+            self._boot_done.set()
+
+    def _wait_for_boot(self):
+        """轮询后台线程状态：完成后构建完整 widget 并启动队列轮询"""
+        if not self._boot_done.is_set():
+            self.root.after(50, self._wait_for_boot)
+            return
+
+        # boot 完成，构建剩余 UI
+        if self._boot_error:
+            print(f"[boot] 重模块导入异常: {self._boot_error}")
+
         self._create_widgets()
         self._update_preview()
+        self._hide_splash()
         self._poll_queues()
 
     def _create_widgets(self):
@@ -1238,10 +1338,31 @@ class RenamerTool:
         self.preview_entry.grid(row=1, column=1, padx=5, pady=2, sticky="ew")
 
     def _create_status_label(self):
-        """显示当前 EXIF 解析库状态，提示用户安装 exifread 以获得更好的 RAW 支持"""
-        status_text = (f"✓ 当前使用 ExifRead {EXIFREAD_VERSION} 处理 (支持RAW/HEIC)"
-                       if EXIFREAD_AVAILABLE else "⚠ 当前使用 PIL 处理(基础EXIF支持，建议安装exifread，pip install exifread)")
-        ttk.Label(self.main_frame, text=status_text, foreground='purple').pack(pady=2, padx=5)
+        """显示当前 EXIF 解析库状态，提示用户安装 exifread 以获得更好的 RAW 支持
+        注：boot 完成前显示「检测中...」，boot 完成后由 _wait_for_boot 调用 _refresh_status_label 改写为真实状态"""
+        self._status_label = ttk.Label(
+            self.main_frame, text="⏳ 正在检测 EXIF 解析器...",
+            foreground='purple'
+        )
+        self._status_label.pack(pady=2, padx=5)
+        # 延后到 boot 完成后填充真实状态
+        self.root.after(60, self._refresh_status_label)
+
+    def _refresh_status_label(self):
+        """根据 _boot_done 状态刷新 EXIF 解析器状态栏文本"""
+        if not getattr(self, '_boot_done', None) or not self._boot_done.is_set():
+            self.root.after(60, self._refresh_status_label)
+            return
+        if not getattr(self, '_status_label', None):
+            return
+        if EXIFREAD_AVAILABLE:
+            text = f"✓ 当前使用 ExifRead {EXIFREAD_VERSION} 处理 (支持RAW/HEIC)"
+        else:
+            text = "⚠ 当前使用 PIL 处理(基础EXIF支持，建议安装exifread，pip install exifread)"
+        try:
+            self._status_label.config(text=text)
+        except tk.TclError:
+            pass  # widget 已被销毁时安全忽略
 
     def _create_log_tab(self):
         """创建日志标签页"""
