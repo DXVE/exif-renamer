@@ -1023,7 +1023,7 @@ class RenameWorker(threading.Thread):
 
 # ===== 主窗口 =====
 
-class RenamerTool:
+class ExifRenamer:
     def __init__(self):
         # ===== 阶段1:骨架上屏（目标 < 200ms） =====
         # 仅做最轻量的初始化：根窗口、标题、图标、字体、style、Splash 占位
@@ -1034,7 +1034,7 @@ class RenamerTool:
         self._splash_label = None
 
         self.root = tk.Tk()
-        self.root.title("EXIF Rename Tool · 文件批量重命名工具 · v1.0")
+        self.root.title("Exif-Renamer · 文件批量重命名工具 · v1.0")
 
         # 设置窗口图标 (左上角 + 任务栏)
         # iconphoto 加载 PNG (1024x1024 源, subsample 4 倍到 256x256)
@@ -1099,7 +1099,7 @@ class RenamerTool:
         self.worker = None
 
         # 显示 Splash 占位（位于主窗口中央的小条），立刻可见
-        self._show_splash("EXIF Rename Tool · 正在加载 EXIF 解析器...")
+        self._show_splash("Exif-Renamer · 正在加载 EXIF 解析器...")
 
         # ===== 阶段2:启动后台线程 import 重模块 =====
         # _boot_heavy_modules 只做纯 Python import，不接触 Tk 任何对象
@@ -1590,7 +1590,7 @@ class RenamerTool:
 
 
 def main():
-    app = RenamerTool()
+    app = ExifRenamer()
     app.run()
 
 

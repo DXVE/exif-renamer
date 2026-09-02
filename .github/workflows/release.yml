@@ -44,13 +44,13 @@ jobs:
         run: git archive --format=zip --output="${{ github.event.repository.name }}-${{ env.BUILD_TS }}.zip" HEAD
 
       - name: PyInstaller 打包 exe
-        # 双 spec: exif_rename.spec (主) + exif_debugger.spec (调试)
+        # 双 spec: exif_renamer.spec (主) + exif_debugger.spec (调试)
         # 各自独立 workpath 防止中间文件冲突, 共享 distpath
-        # 调试时本地单独跑一个也行: pyinstaller exif_rename.spec
+        # 调试时本地单独跑一个也行: pyinstaller exif_renamer.spec
         env:
           WM_BUILD_TAG: ${{ env.BUILD_TS }}
         run: |
-          pyinstaller --workpath .pyi-build-rename --distpath .pyi-dist exif_rename.spec
+          pyinstaller --workpath .pyi-build-renamer --distpath .pyi-dist exif_renamer.spec
           pyinstaller --workpath .pyi-build-debugger --distpath .pyi-dist exif_debugger.spec
 
       - name: 验证产物
