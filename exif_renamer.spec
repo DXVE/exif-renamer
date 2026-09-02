@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller spec: 主程序 rename_tool.py
-产物名: rename_tool-<BUILD_TS>.exe (跟随原脚本名)
+PyInstaller spec: 主程序 exif_renamer.py
+产物名: exif_renamer-<BUILD_TS>.exe (跟随原脚本名)
 BUILD_TS 由 GitHub Actions 通过 env WM_BUILD_TAG 传入
 """
 import os
@@ -46,4 +46,4 @@ def build_exe(entry):
     )
 
 
-build_exe('src/rename_tool.py')
+build_exe('src/exif_renamer.py')
