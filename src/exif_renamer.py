@@ -124,6 +124,11 @@ MAX_PATH_LIMIT = int(os.environ.get("RENAME_TOOL_MAX_PATH", "259"))
 # 使用 threading.local 保证每个线程拥有独立 EXIF 缓存，天然线程安全
 _exif_cache = threading.local()
 
+
+def _clear_exif_cache():
+    """清空当前线程的 EXIF 缓存，应在后台任务线程起始处调用"""
+    _exif_cache.__dict__.clear()
+
 # ===== 核心处理函数 =====
 
 def parse_date_string(date_str: str) -> datetime:
@@ -423,12 +428,19 @@ def collect_files_with_categories(folder: str, recursive: bool,
 
 
 def safe_relpath(path: str, start: str) -> str:
-    """安全的 os.path.relpath，跨驱动器时返回空字符串"""
+    """安全的 os.path.relpath，跨驱动器时保留 start 树内的相对结构"""
+    path = os.path.normpath(path)
+    start = os.path.normpath(start)
     try:
         rel = os.path.relpath(path, start)
-        return "" if rel in ('.', '') else rel
+        if rel not in ('.', ''):
+            return rel
     except ValueError:
-        return ""
+        pass
+    # 跨驱动器回退：若 path 仍在 start 树下，直接截取相对部分
+    if path.startswith(start + os.sep):
+        return path[len(start) + 1:]
+    return ""
 
 
 def get_relative_dir(full_path: str, base_folder: str) -> str:
@@ -902,6 +914,7 @@ class RenameWorker(threading.Thread):
 
     def run(self):
         try:
+            _clear_exif_cache()  # 确保本任务线程的 EXIF 缓存干净
             folder = self.params['folder']
             recursive = self.params['recursive']
             selected = self.params['selected']
@@ -1500,9 +1513,6 @@ class ExifRenamer:
 
     def start_rename(self):
         """校验输入参数，启动后台重命名工作线程"""
-        # 清理当前线程的 EXIF 缓存，避免旧数据干扰新任务
-        _exif_cache.__dict__.clear()
-
         folder = self.src_var.get().strip()
         if not folder or not os.path.isdir(folder):
             ErrorDialog(self.root, "请选择一个有效的源文件夹", "错误")
