@@ -70,21 +70,27 @@ EXIFREAD_AVAILABLE = False
 EXIFREAD_VERSION = None
 _exifread_module = None  # 真正 import 后的模块引用
 
+# 保护 exifread / PIL 惰性导入的锁，防止多线程重复导入并保证全局状态可见性
+_lazy_import_lock = threading.Lock()
+
 
 def _ensure_exifread():
     """惰性导入 exifread，调用方只需关心 EXIFREAD_AVAILABLE"""
     global EXIFREAD_AVAILABLE, EXIFREAD_VERSION, _exifread_module
     if _exifread_module is not None:
         return _exifread_module
-    try:
-        import exifread as _er
-        _exifread_module = _er
-        EXIFREAD_AVAILABLE = True
-        EXIFREAD_VERSION = getattr(_er, '__version__', 'unknown')
-    except ImportError:
-        EXIFREAD_AVAILABLE = False
-        EXIFREAD_VERSION = None
-    return _exifread_module
+    with _lazy_import_lock:
+        if _exifread_module is not None:
+            return _exifread_module
+        try:
+            import exifread as _er
+            _exifread_module = _er
+            EXIFREAD_AVAILABLE = True
+            EXIFREAD_VERSION = getattr(_er, '__version__', 'unknown')
+        except ImportError:
+            EXIFREAD_AVAILABLE = False
+            EXIFREAD_VERSION = None
+        return _exifread_module
 
 
 # PIL 也走 lazy 导入：模块级仅记录状态，真正 import 在后台线程中执行
@@ -98,15 +104,18 @@ def _ensure_pil():
     global PIL_AVAILABLE, _PIL_Image, _PIL_TAGS
     if _PIL_Image is not None:
         return _PIL_Image, _PIL_TAGS
-    try:
-        from PIL import Image
-        from PIL.ExifTags import TAGS
-        _PIL_Image = Image
-        _PIL_TAGS = TAGS
-        PIL_AVAILABLE = True
-    except ImportError:
-        PIL_AVAILABLE = False
-    return _PIL_Image, _PIL_TAGS
+    with _lazy_import_lock:
+        if _PIL_Image is not None:
+            return _PIL_Image, _PIL_TAGS
+        try:
+            from PIL import Image
+            from PIL.ExifTags import TAGS
+            _PIL_Image = Image
+            _PIL_TAGS = TAGS
+            PIL_AVAILABLE = True
+        except ImportError:
+            PIL_AVAILABLE = False
+        return _PIL_Image, _PIL_TAGS
 
 # EXIF 日期常见编码格式清单（含带时区偏移的变体）
 DATE_FORMATS = [
@@ -135,7 +144,8 @@ def parse_date_string(date_str: str) -> datetime:
     """解析 EXIF 日期字符串，支持多种常见格式，自动剥离末尾的时区偏移部分"""
     original = date_str
     date_str = str(date_str).strip()
-    date_str = re.split(r'[+-]\d{2}:\d{2}', date_str)[0]
+    # 仅剥离字符串末尾的时区偏移（如 +08:00 / -05:00 或 Z），避免误伤字段中间字符
+    date_str = re.sub(r'\s*(?:[+-]\d{2}:\d{2}|Z)\s*$', '', date_str)
     date_str = date_str.replace('T', ' ')
     for fmt in DATE_FORMATS:
         try:
@@ -278,13 +288,14 @@ def get_media_datetime(filepath: str, log_func=None) -> tuple[datetime, bool, st
 
 
 def generate_unique_id(existing_ids: set[str]) -> str:
-    """生成四位随机字母数字 ID，用于文件名去重"""
+    """生成字母数字 ID 用于文件名去重；4 位空间不足时自动扩位"""
     chars = string.ascii_uppercase + string.digits
-    max_attempts = 10000
-    for _ in range(max_attempts):
-        new_id = ''.join(random.choices(chars, k=4))
-        if new_id not in existing_ids:
-            return new_id
+    max_attempts = 100000
+    for length in range(4, 9):  # 4-8 位，向后兼容原 4 位占位
+        for _ in range(max_attempts):
+            new_id = ''.join(random.choices(chars, k=length))
+            if new_id not in existing_ids:
+                return new_id
     raise RuntimeError("无法生成唯一ID：已用尽所有重试次数")
 
 
@@ -377,7 +388,8 @@ def collect_files_with_categories(folder: str, recursive: bool,
     if recursive:
         try:
             for root, dirs, files in os.walk(folder):
-                dirs[:] = [d for d in dirs if not d.startswith('$')]
+                # 跳过系统/隐藏目录以及以 $ 开头的目录，避免进入 .git/.venv 等
+                dirs[:] = [d for d in dirs if not d.startswith(('.', '$'))]
                 try:
                     for f in files:
                         if f.lower() in DEFAULT_IGNORED_FILENAMES:
@@ -487,7 +499,6 @@ def prepare_rename_plan(folder: str, all_files: list[str], media_files: list[str
             continue
 
         ext = os.path.splitext(filepath)[1].lower()
-        ext = '.jpg' if ext == '.jpeg' else ext
         filetype = get_filetype(ext)
         dt, is_fallback, reason = get_media_datetime(filepath, log_func)
         file_infos.append((filepath, dt, ext, filetype, is_fallback, reason, original_mtime))
@@ -498,7 +509,7 @@ def prepare_rename_plan(folder: str, all_files: list[str], media_files: list[str
             fallback_previews[filepath] = {'preview': preview_name, 'reason': reason}
             if log_func:
                 short_reason = reason.split(':')[-1].strip() if ':' in reason else reason
-                log_func(f"{os.path.basename(filepath)} 使用 {short_reason}", "WARNING")
+                log_func(f"{os.path.basename(filepath)} 使用备用时间源: {short_reason}", "WARNING")
                 log_func(f"预览: {os.path.basename(filepath)} -> {preview_name}", "INFO")
 
     file_infos.sort(key=lambda x: (x[1], x[0]))
@@ -554,6 +565,10 @@ def prepare_rename_plan(folder: str, all_files: list[str], media_files: list[str
                     os.makedirs(target_dir, exist_ok=True)
                     created_dirs.add(target_dir)
                 new_path = os.path.join(target_dir, new_filename)
+                if new_path == filepath:
+                    if log_func:
+                        log_func(f"目标路径与源路径相同，无需复制: {filepath}", "INFO")
+                    break
             else:
                 new_path = os.path.join(os.path.dirname(filepath), new_filename)
                 if new_path == filepath:
@@ -720,7 +735,7 @@ class CombinedWarningDialog(CustomDialogBase):
         if ignored_files:
             msg += f"⚠ 其中 {len(ignored_files)} 个不是支持的媒体格式，将不会被处理：\n"
         if fallback_files:
-            msg += f"⚠ 其中 {len(fallback_files)} 个未能获取原始拍摄时间，将使用文件修改时间：\n"
+            msg += f"⚠ 其中 {len(fallback_files)} 个未能获取原始拍摄时间（EXIF DateTimeOriginal），将使用备用时间源（其他 EXIF 时间或文件修改时间）：\n"
         msg_label = ttk.Label(main_frame, text=msg, wraplength=1160, justify=tk.LEFT)
         msg_label.pack(anchor=tk.W, pady=(0, 10))
 
@@ -737,13 +752,13 @@ class CombinedWarningDialog(CustomDialogBase):
             ttk.Label(left_frame, text="（无忽略文件）").pack(expand=True)
 
         if fallback_files:
-            right_frame = ttk.LabelFrame(paned, text=f"使用修改时间的文件 ({len(fallback_files)})", padding=5)
+            right_frame = ttk.LabelFrame(paned, text=f"使用备用时间源的文件 ({len(fallback_files)})", padding=5)
             paned.add(right_frame, weight=1)
             self._build_listbox(right_frame, fallback_files, is_fallback=True)
         else:
             right_frame = ttk.Frame(paned)
             paned.add(right_frame, weight=1)
-            ttk.Label(right_frame, text="（无使用修改时间的文件）").pack(expand=True)
+            ttk.Label(right_frame, text="（无使用备用时间源的文件）").pack(expand=True)
 
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(pady=10)
@@ -904,12 +919,13 @@ class FailureDialog(CustomDialogBase):
 
 class RenameWorker(threading.Thread):
     """后台线程：在独立线程中执行文件扫描、日期分析、弹窗请求与重命名操作，避免阻塞 GUI"""
-    def __init__(self, params, log_queue, request_queue, response_queue):
+    def __init__(self, params, log_queue, request_queue, response_queue, shutdown_event):
         super().__init__()
         self.params = params
         self.log_queue = log_queue
         self.request_queue = request_queue
         self.response_queue = response_queue
+        self.shutdown_event = shutdown_event
         self.daemon = True
 
     def run(self):
@@ -978,6 +994,9 @@ class RenameWorker(threading.Thread):
                             continue_rename = result
                             break
                     except queue.Empty:
+                        if self.shutdown_event.is_set():
+                            self.log_queue.put(('__cancelled__', None))
+                            return
                         continue
                 if not continue_rename:
                     self.log_queue.put(('__cancelled__', None))
@@ -1004,6 +1023,9 @@ class RenameWorker(threading.Thread):
                         continue_rename = result
                         break
                 except queue.Empty:
+                    if self.shutdown_event.is_set():
+                        self.log_queue.put(('__cancelled__', None))
+                        return
                     continue
             if not continue_rename:
                 self.log_queue.put(('__cancelled__', None))
@@ -1090,7 +1112,11 @@ class ExifRenamer:
         default_font.configure(family="Microsoft YaHei", size=9)
 
         style = ttk.Style()
-        style.theme_use('xpnative')
+        try:
+            style.theme_use('xpnative')
+        except tk.TclError:
+            # xpnative 仅在 Windows 可用；非 Windows 平台使用跨平台 fallback
+            style.theme_use('clam')
         style.configure('.', font=('Microsoft YaHei', 9))
 
         # 轻量 StringVar/BooleanVar 初始化（无 widget，开销极小）
@@ -1110,6 +1136,10 @@ class ExifRenamer:
         self.request_queue = queue.Queue()
         self.response_queue = queue.Queue()
         self.worker = None
+        self._shutdown_event = threading.Event()
+
+        # 绑定窗口关闭事件，确保后台任务有机会干净退出
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
         # 显示 Splash 占位（位于主窗口中央的小条），立刻可见
         self._show_splash("Exif-Renamer · 正在加载 EXIF 解析器...")
@@ -1175,6 +1205,17 @@ class ExifRenamer:
         self._update_preview()
         self._hide_splash()
         self._poll_queues()
+
+    def _on_close(self):
+        """关闭窗口前请求后台任务结束并等待片刻，避免 daemon 线程被强制中断"""
+        if self.worker and self.worker.is_alive():
+            if getattr(self, 'log_text', None):
+                self.log("正在等待后台任务结束...", "INFO")
+            else:
+                print("[close] 正在等待后台任务结束...")
+            self._shutdown_event.set()
+            self.worker.join(timeout=2.0)
+        self.root.destroy()
 
     def _create_widgets(self):
         style = ttk.Style()
@@ -1490,9 +1531,11 @@ class ExifRenamer:
         elif req['type'] == 'rename_confirm':
             items = []
             for old, new in req['rename_map']:
-                old_rel = os.path.relpath(old, req['src_base'])
+                old_rel = safe_relpath(old, req['src_base']) or os.path.basename(old)
                 if req['copy_mode']:
-                    new_rel = os.path.relpath(new, req['target_base']) if req['target_base'] else new
+                    new_rel = safe_relpath(new, req['target_base']) if req['target_base'] else new
+                    if not new_rel:
+                        new_rel = os.path.basename(new)
                 else:
                     new_rel = os.path.basename(new)
                 items.append(f"{old_rel} → {new_rel}")
@@ -1557,7 +1600,8 @@ class ExifRenamer:
             while not q.empty():
                 q.get()
 
-        self.worker = RenameWorker(params, self.log_queue, self.request_queue, self.response_queue)
+        self._shutdown_event.clear()
+        self.worker = RenameWorker(params, self.log_queue, self.request_queue, self.response_queue, self._shutdown_event)
         self.worker.start()
 
     def on_rename_finished(self, stats):
