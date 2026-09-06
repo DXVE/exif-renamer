@@ -33,3 +33,6 @@ history/
 
 # images
 images/
+
+# ZCode client local state (session plans, etc.)
+.zcode/
