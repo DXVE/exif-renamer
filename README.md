@@ -24,10 +24,10 @@
 
 <table align="center">
   <tr>
-    <td align="center" width="20%"><img src="https://github.com/user-attachments/assets/7cdbf5ae-3a1d-469a-9ab5-d043bb6cf79b" alt="主界面" width="95%"></td>
-    <td align="center" width="20%"><img src="https://github.com/user-attachments/assets/71cbe251-8cd7-4199-884f-c8a14ce5f4bb" alt="占位符列表" width="95%"></td>
-    <td align="center" width="20%"><img src="https://github.com/user-attachments/assets/47aed996-f0bd-4bde-ab53-0aee7607e1f6" alt="确认弹窗" width="95%"></td>
-    <td align="center" width="20%"><img src="https://github.com/user-attachments/assets/14baf43f-4472-499c-8c48-b9256e1173d5" alt="命名结果" width="95%"></td>
+    <td align="center" width="20%"><img src="/images/1.png" alt="主界面" width="95%"></td>
+    <td align="center" width="20%"><img src="/images/2.png" alt="占位符列表" width="95%"></td>
+    <td align="center" width="20%"><img src="/images/3.png" alt="确认弹窗" width="95%"></td>
+    <td align="center" width="20%"><img src="/images/4.png" alt="命名结果" width="95%"></td>
   </tr>
   <tr>
     <td align="center" width="20%"><sub style="color: #888;">主界面</sub></td>
@@ -63,14 +63,19 @@
 
 如果你只是想使用工具，不需要修改源码，**推荐直接下载已打包好的 exe 文件**，无需安装 Python 环境以及依赖。
 
-1. 前往 [Releases 页面](https://github.com/DXVE/exif_renamer/releases)
+1. 前往 [Releases 页面](https://github.com/DXVE/rename-tool-exif/releases)
 2. 选择最新版本
 3. 下载以下编译好的文件：
-   - **`exif_renamer-<时间戳>.exe`** — 主程序
-   - **`exif_debugger-<时间戳>.exe`** — 调试工具（可选，查看 EXIF 原始数据）
+   - **`exif_renamer-<版本号>.exe`** — 主程序
+   - **`exif_debugger-<版本号>.exe`** — 调试工具（可选，查看 EXIF 原始数据）
 4. 双击运行即可
 
-> 💡 每个 Release 还附带源码 zip 包，供开发者参考或自行构建。
+> 💡 想查看或下载对应 tag 的源码，可在 Release 页面下方「Source code (zip) / (tar.gz)」由 GitHub 自动生成。开发者建议直接 `git clone` 仓库。
+
+> ⚠️ **关于杀毒软件误报**：经测试打包后的 exe 可能被部分杀毒软件（如 Windows Defender ）误报为病毒，属于**误报**而非真正的恶意程序。所有程序均由本仓库公开源码编译，可自行核对后放心使用。若下载时被杀毒软件拦截，可以选择：
+> 1. 直接在浏览器/资源管理器中放行该文件；
+> 2. 或对该文件所在目录添加信任/排除项；
+> 3. 或参考下方说明，从源码自行编译一份 exe。
 
 ---
 
@@ -142,14 +147,14 @@ python src/exif_renamer.py
 
 _示例输出基于 `2026年7月5日 14:30:45` 生成_
 
-| 占位符（组合示例）             | 含义                  | 示例输出                                |
-|-----------------------|---------------------|-------------------------------------|
-| `{YYYY}-{MM}-{DD}`    | 年-月-日（年份可选两位`{YY}`） | `2026-07-05`或`26-07-05`             |
-| `{hh}-{mm}-{ss}`      | 时-分-秒（24小时制）        | `14-30-45`                          |
-| `{prefix}`            | 自定义前缀               | 用户输入                                |
-| `{filetype}`          | 文件类型标签              | `IMAGE` / `RAW` / `VIDEO` / `AUDIO` |
-| `{id}`                | 四位随机字母+数字           | `A1B2`                              |
-| `{seq}` / `{seq:04d}` | 顺序编号（补零位数可自定义）      | `1、2、…` / `0001、0002、…`             |
+| 占位符（组合示例）    | 含义                           | 示例输出                            |
+|-----------------------|--------------------------------|-------------------------------------|
+| `{YYYY}-{MM}-{DD}`    | 年-月-日（年份可选两位`{YY}`） | `2026-07-05`或`26-07-05`            |
+| `{hh}-{mm}-{ss}`      | 时-分-秒（24小时制）           | `14-30-45`                          |
+| `{prefix}`            | 自定义前缀                     | 用户输入                            |
+| `{filetype}`          | 文件类型标签                   | `IMAGE` / `RAW` / `VIDEO` / `AUDIO` |
+| `{id}`                | 四位随机字母+数字              | `A1B2`                              |
+| `{seq}` / `{seq:04d}` | 顺序编号（补零位数可自定义）   | `1、2、…` / `0001、0002、…`         |
 
 **示例：模板 `{prefix}-{YYYY}-{MM}-{DD}-{id}` → 生成 `screenshot-2026-07-05-A1B2.jpg`**
 
@@ -168,12 +173,7 @@ _示例输出基于 `2026年7月5日 14:30:45` 生成_
 
 ## 常见问题（FAQ）
 
-### Q1：处理过程中界面响应变慢？
-
-这是正常现象。工具使用多线程，但日志刷新和对话框轮询仍在主线程进行。  
-如果文件数量极大（>10,000），日志输出密集时界面可能会有短暂停顿。可等待处理完成，或分批处理。
-
-### Q2：某些照片的日期不对？
+### Q1：照片的日期不对
 
 检查是否安装了 `exifread`。部分手机拍摄的照片或社交平台下载的图片可能不包含标准 EXIF，此时工具会回退到文件修改时间。可以：
 
@@ -181,11 +181,11 @@ _示例输出基于 `2026年7月5日 14:30:45` 生成_
 2. 确认照片本身包含 EXIF（可使用```exif_debugger.py```程序进行确认）
 3. 对于确实没有 EXIF 的照片，工具会使用文件修改时间
 
-### Q3：能支持更多的 RAW 格式吗？
+### Q2：能支持更多的 RAW 格式吗？
 
 目前支持的 RAW 格式涵盖主流相机品牌（索尼 .arw、佳能 .cr2/.cr3、尼康 .nef/.nrw、富士 .raf、奥林巴斯 .orf、宾得 .pef、理光 .rw2、适马 .x3f 等）。如需添加更多格式，可在源代码的 `RAW_EXTS` 元组中添加。
 
-### Q4：多个文件重命名后出现相同的名字怎么办？
+### Q3：多个文件重命名后会出现相同的名字吗？
 
 工具会自动处理文件名冲突：
 - 如果模板包含 `{seq}` 占位符，会自动递增序号确保唯一（如 `photo_001.jpg`、`photo_002.jpg`）
@@ -201,4 +201,4 @@ _示例输出基于 `2026年7月5日 14:30:45` 生成_
 ---
 
 *部分内容及代码由AI生成，请注意甄别*  
-*Vibe Coding with [DeepSeek](https://api-docs.deepseek.com/zh-cn/) & [AstrBot](https://github.com/AstrBotDevs/AstrBot-desktop)*
+*Vibe Coding with [DeepSeek](https://api-docs.deepseek.com/zh-cn/) & [ZCode](https://zcode.z.ai/cn)*

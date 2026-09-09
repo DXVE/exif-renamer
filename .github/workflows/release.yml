@@ -21,17 +21,6 @@ jobs:
           # 本项目用 Python 3.14 (本地 venv 已验证)
           python-version: '3.14'
 
-      - name: 生成 build 时间戳
-        # 写到 GITHUB_ENV, 后续 step 全部用 ${{ env.BUILD_TS }} 引用
-        # 用 [DateTime]::UtcNow 不依赖 runner 本地时区, 跨 runner 一致
-        # 中国无夏令时, 固定 +8h 偏移到北京时间; 改时区改这里就行
-        # 格式 yyyyMMdd-HHmmss
-        shell: pwsh
-        run: |
-          $ts = [DateTime]::UtcNow.AddHours(8).ToString('yyyyMMdd-HHmmss')
-          "BUILD_TS=$ts" | Add-Content -Path $env:GITHUB_ENV
-          Write-Host "BUILD_TS = $ts"
-
       - name: 安装构建依赖
         # 项目无 pyproject.toml, 走 requirements.txt + pyinstaller
         run: |
@@ -39,16 +28,13 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: 打包源码 zip
-        # 文件名: <repo>-<ts>.zip
-        run: git archive --format=zip --output="${{ github.event.repository.name }}-${{ env.BUILD_TS }}.zip" HEAD
-
       - name: PyInstaller 打包 exe
         # 双 spec: exif_renamer.spec (主) + exif_debugger.spec (调试)
         # 各自独立 workpath 防止中间文件冲突, 共享 distpath
         # 调试时本地单独跑一个也行: pyinstaller exif_renamer.spec
+        # WM_BUILD_TAG 用 tag 名代替时间戳, 产物名 = <脚本名>-<tag>.exe
         env:
-          WM_BUILD_TAG: ${{ env.BUILD_TS }}
+          WM_BUILD_TAG: ${{ github.ref_name }}
         run: |
           pyinstaller --workpath .pyi-build-renamer --distpath .pyi-dist exif_renamer.spec
           pyinstaller --workpath .pyi-build-debugger --distpath .pyi-dist exif_debugger.spec
@@ -85,10 +71,10 @@ jobs:
           # 确保步骤正常退出
           $LASTEXITCODE = 0
 
-      - name: 上传源码 + exe 到 Release
+      - name: 上传 exe 到 Release
+        # 源码 zip 不再单独打包, GitHub 在每个 Release 自动生成 source code (zip) 下载
         uses: softprops/action-gh-release@v3
         with:
           files: |
-            ${{ github.event.repository.name }}-${{ env.BUILD_TS }}.zip
             .pyi-dist/*.exe
 

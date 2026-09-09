@@ -225,7 +225,7 @@ python src/exif_debugger.py
 | `exif_renamer.spec` | `exif_renamer-<BUILD_TAG>.exe` | 主程序,`console=False`(GUI 无黑框) |
 | `exif_debugger.spec` | `exif_debugger-<BUILD_TAG>.exe` | 调试工具,`console=False` |
 
-产物名中的 `<BUILD_TAG>` 取自环境变量 `WM_BUILD_TAG`,缺省为 `dev`(本地随手打包得到 `exif_renamer-dev.exe`;CI 里由时间戳注入)。
+产物名中的 `<BUILD_TAG>` 取自环境变量 `WM_BUILD_TAG`,缺省为 `dev`(本地随手打包得到 `exif_renamer-dev.exe`;CI 里由 git tag 注入,产物 = `<脚本名>-<tag>.exe`,如 `exif_renamer-v1.0.exe`)。
 
 spec 中值得注意的配置(两个 spec 结构相同,主程序额外把 `assets/icon.ico` 与 `icon.png` 通过 `datas` 注入产物):
 
@@ -250,22 +250,22 @@ pyinstaller exif_renamer.spec            # 产物在当前目录 dist? 见下方
 `.github/workflows/release.yml` 定义自动发布,**仅 Windows**(注释明确说明 PyInstaller 不能跨平台产出 Windows exe)。触发方式:推送形如 `v*` 的 git tag。流程为:
 
 1. checkout → 安装 Python 3.14 → 安装 `requirements.txt` + `pyinstaller`;
-2. 用 PowerShell 取 **UTC+8** 的当前时间生成 `yyyyMMdd-HHmmss` 时间戳,写入 `BUILD_TS`(写入 `GITHUB_ENV`,供后续步骤引用);
-3. `git archive` 打出源码 zip(文件名含仓库名与时间戳;`.gitattributes` 的 `export-ignore` 会把 `.github/`、`.gitignore`、`.gitattributes` 排除出 zip);
-4. 用两个 spec 分别打包:`pyinstaller --workpath .pyi-build-renamer --distpath .pyi-dist exif_renamer.spec`,调试工具同理(`.pyi-build-debugger`),两者共享 `.pyi-dist` 输出;
-   - `WM_BUILD_TAG=$BUILD_TS` 注入产物名;
-5. 校验 `.pyi-dist` 下确有 exe 产物并打印体积;
-6. 用 `gh` 删除同名 tag 的旧 release(幂等,便于重发);
-7. 用 `softprops/action-gh-release` 上传源码 zip 与全部 exe。
+2. 用两个 spec 分别打包:`pyinstaller --workpath .pyi-build-renamer --distpath .pyi-dist exif_renamer.spec`,调试工具同理(`.pyi-build-debugger`),两者共享 `.pyi-dist` 输出;
+   - `WM_BUILD_TAG=${{ github.ref_name }}` 注入产物名,即产物 = `<脚本名>-<tag>.exe`;
+3. 校验 `.pyi-dist` 下确有 exe 产物并打印体积;
+4. 用 `gh` 删除同名 tag 的旧 release(幂等,便于重发);
+5. 用 `softprops/action-gh-release` 上传全部 exe。
 
-时间相关注意:工作流固定按 UTC+8 偏移取时间,注释提醒——改发布时区需同步修改该步,不要依赖 runner 本地时区。
+源码 zip 由 GitHub 在每个 Release 页面自动生成「Source code (zip) / (tar.gz)」,与 `git archive` 产出等价,不再由 CI 单独打包。
+
+产物命名说明:产物名跟随 git tag,例如 `v1.0` tag 触发后产物为 `exif_renamer-v1.0.exe` 与 `exif_debugger-v1.0.exe`。tag 名即版本号。
 
 ### 3.5 环境变量
 
 | 变量 | 默认 | 作用 |
 |---|---|---|
 | `RENAME_TOOL_MAX_PATH` | `259` | 覆盖新文件路径长度上限(默认值即 Windows MAX_PATH 语义:260 含 null 终止符,有效字符 259),详见 [§4.6](#46-路径长度与跨盘处理) |
-| `WM_BUILD_TAG` | `dev` | PyInstaller 产物名的时间/版本标签,由 CI 注入 |
+| `WM_BUILD_TAG` | `dev` | PyInstaller 产物名的版本标签,本地直接跑 spec 时默认 `dev`,CI 由 `github.ref_name`(即 git tag)注入 |
 
 ---
 

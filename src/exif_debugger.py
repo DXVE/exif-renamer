@@ -3,8 +3,9 @@
 import os
 import tkinter as tk
 from tkinter import filedialog, scrolledtext, messagebox
-from PIL import Image
 import exifread
+from PIL import Image
+
 
 class ExifDebugger:
     def __init__(self, root):
