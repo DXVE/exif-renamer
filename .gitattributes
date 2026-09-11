@@ -3,6 +3,11 @@
 *.md text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
+*.spec text eol=lf
+*.txt text eol=lf
+LICENSE text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
 
 # export-ignore — git archive 打包时排除以下路径，不随 release 分发
 .github/       export-ignore
