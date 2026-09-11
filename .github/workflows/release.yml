@@ -22,17 +22,17 @@ jobs:
           python-version: '3.14'
 
       - name: 安装构建依赖
-        # 项目无 pyproject.toml, 走 requirements.txt + pyinstaller
+        # 项目无 pyproject.toml, 采用 requirements.txt + pyinstaller
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
 
       - name: PyInstaller 打包 exe
-        # 双 spec: exif_renamer.spec (主) + exif_debugger.spec (调试)
+        # 双 spec: exif_renamer.spec (主程序) + exif_debugger.spec (调试程序)
         # 各自独立 workpath 防止中间文件冲突, 共享 distpath
-        # 调试时本地单独跑一个也行: pyinstaller exif_renamer.spec
-        # WM_BUILD_TAG 用 tag 名代替时间戳, 产物名 = <脚本名>-<tag>.exe
+        # 调试时本地单独跑: pyinstaller exif_renamer.spec
+        # WM_BUILD_TAG 产物名 = <脚本名>-<tag>.exe
         env:
           WM_BUILD_TAG: ${{ github.ref_name }}
         run: |
@@ -72,9 +72,7 @@ jobs:
           $LASTEXITCODE = 0
 
       - name: 上传 exe 到 Release
-        # 源码 zip 不再单独打包, GitHub 在每个 Release 自动生成 source code (zip) 下载
         uses: softprops/action-gh-release@v3
         with:
           files: |
             .pyi-dist/*.exe
-

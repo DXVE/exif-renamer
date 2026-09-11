@@ -47,7 +47,7 @@
 **Exif-Renamer** 是一个纯 GUI 的**多格式文件批量重命名工具**。它读取媒体文件内嵌的 **EXIF 拍摄时间**,再按照用户自定义的**命名模板**把文件重命名(或复制到新目录),用于照片归档、RAW 文件整理等场景。
 
 - **形态**:Windows 桌面 GUI 应用(Tkinter/ttk 实现);核心处理逻辑同时兼容 macOS/Linux 基础运行。
-- **技术栈**:Python 3.10+(代码使用 `X | None` 联合类型语法);GUI 使用标准库 Tkinter;第三方依赖仅 `Pillow` 与 `exifread`(且均可选,见 [§3.2](#32-依赖与惰性加载))。
+- **技术栈**:Python 3.14+(开发与 CI 均使用 3.14,代码使用 `X | None` 联合类型语法);GUI 使用标准库 Tkinter;第三方依赖仅 `Pillow` 与 `exifread`(且均可选,见 [§3.2](#32-依赖与惰性加载))。
 - **两个程序**:
   - 主程序:批量化重命名/复制,包含设置界面、预览、确认弹窗、日志面板与后台线程。
   - 调试工具:单张图片的 EXIF 分析器,左侧展示基本信息与常用 EXIF 字段,右侧展示 exifread 解析出的全部标签,可将结果导出为文本。用于排查"为什么这张照片读不到拍摄时间"。
@@ -179,7 +179,7 @@
 
 ### 3.1 从源码运行
 
-环境要求:Python 3.10+。主程序在 Windows 上获得完整支持;macOS/Linux 可运行基础功能。
+环境要求:Python 3.14+(开发与 CI 均使用 3.14)。主程序在 Windows 上获得完整支持;macOS/Linux 可运行基础功能。
 
 ```bash
 # 1) (建议) 创建虚拟环境
@@ -229,8 +229,7 @@ python src/exif_debugger.py
 
 spec 中值得注意的配置(两个 spec 结构相同,主程序额外把 `assets/icon.ico` 与 `icon.png` 通过 `datas` 注入产物):
 
-- `upx=True`:开启 UPX 压缩以缩短解压/冷启动耗时;
-- `upx_exclude=['vcruntime140.dll', 'ucrtbase.dll']`:避免 UPX 误压缩系统 DLL 引发兼容问题;
+- `upx=False`:未启用 UPX 压缩(曾评估用于缩短冷启动耗时,当前关闭以规避安全软件误报);
 - `console=False`:窗口程序不弹控制台;
 - 入口脚本由 spec 内显式指向 `src/` 下对应文件。
 
@@ -371,7 +370,7 @@ EXIF DateTimeOriginal → Image DateTime → EXIF DateTimeDigitized
 
 `apply_template` 按顺序执行:
 
-1. 替换**固定占位符**(一次性替换表):`{YYYY}` `{YY}` `{MM}` `{DD}` `{hh}` `{mm}` `{ss}`(24 小时制)、`{prefix}`、`{filetype}`(输出 `IMAGE` / `RAW` / `VIDEO` / `AUDIO`)、`{id}`;
+1. 替换**固定占位符**(一次性替换表):`{YYYY}` `{YY}` `{MM}` `{DD}` `{hh}` `{mm}` `{ss}`(24 小时制)、`{prefix}`、`{filetype}`(输出 `IMAGE` / `RAW` / `VIDEO` / `AUDIO`,自定义类型为 `FILE`)、`{id}`;
 2. 正则处理**序号占位符** `{seq}` 与 `{seq:<fmt>}`(如 `{seq:04d}`),`<fmt>` 交给 `format(seq, fmt)`,非法格式回退为纯数字字符串;
 3. 移除**所有残余**形如 `{...}` 的内容——即未识别占位符会被静默剔除,模板写错不会报错。
 
@@ -535,7 +534,7 @@ worker 侧的**请求-应答循环**与之配对:发请求后进入 `while True`
 | `{MM}` `{DD}` | 月、日 |
 | `{hh}` `{mm}` `{ss}` | 时、分、秒(24 小时制) |
 | `{prefix}` | 前缀输入框的值 |
-| `{filetype}` | 类型标签:`IMAGE`/`RAW`/`VIDEO`/`AUDIO` |
+| `{filetype}` | 类型标签:`IMAGE`/`RAW`/`VIDEO`/`AUDIO`(自定义类型为 `FILE`,见 [§6.2](#62-扩展名矩阵)) |
 | `{id}` | 4–8 位随机大写字母+数字,批内唯一 |
 | `{seq}` | 序号 `1,2,3,…` |
 | `{seq:0Nd}` | 补零序号,如 `{seq:03d}`→`001`;`<fmt>` 任意合法 format 说明符 |
@@ -660,6 +659,8 @@ README 对此有面向用户的说明与免责表述(个人工具、不建议在
 仓库根目录
 ├── README.md                 面向最终用户的文档(功能/下载/使用/FAQ)
 ├── wiki.md                   本文档(面向开发者)
+├── LICENSE                   本项目 MIT 许可证(含 AI 辅助生成内容附加说明)
+├── THIRD_PARTY_LICENSES.md   第三方组件(pillow/exifread 等)版权声明与许可
 ├── requirements.txt          依赖清单(Pillow、exifread)
 ├── .gitignore                Python/venv/IDE/构建产物忽略
 ├── .gitattributes            换行符统一 + git archive 排除规则
@@ -674,12 +675,12 @@ README 对此有面向用户的说明与免责表述(个人工具、不建议在
 ├── assets/
 │   ├── icon.ico              EXE 图标(打包用)
 │   └── icon.png              窗口图标(运行与打包均会用到)
-├── images/                   README 截图素材(已被 .gitignore 忽略,仍被版本库跟踪)
+├── images/                   README 截图素材(已被 .gitignore 忽略,未纳入版本库)
 └── history/
     └── (旧版源码归档)        早期单文件版本,仅作演进对照,不参与构建
 ```
 
-> 说明:`images/`(README 截图素材)与 `history/` 已被 `.gitignore` 忽略但仍被版本库跟踪,克隆后存在;`.pyi-build-*/`、`.pyi-dist/`(PyInstaller 中间/输出)、`.venv/`、`__pycache__/`、`build/`、`dist/` 属本地构建产物,从未入库,克隆后不存在。
+> 说明:`images/`(README 截图素材)与 `history/` 均已被 `.gitignore` 忽略且未纳入版本库,克隆后不存在;`.pyi-build-*/`、`.pyi-dist/`(PyInstaller 中间/输出)、`.venv/`、`__pycache__/`、`build/`、`dist/` 属本地构建产物,从未入库,克隆后不存在。
 
 ### 9.2 符号速查(按模块分组,不含行号)
 
@@ -695,7 +696,7 @@ README 对此有面向用户的说明与免责表述(个人工具、不建议在
 | `generate_unique_id(existing)` | 4–8 位随机 ID,批内去重 |
 | `apply_template(tpl, dt, prefix, id, seq, type)` | 模板渲染(占位符 + 残余 `{...}` 移除) |
 | `sanitize_filename(name)` | 非法字符替换 + 截断 200 |
-| `get_filetype(ext)` | 扩展名 → `IMAGE/RAW/VIDEO/AUDIO`(查表) |
+| `get_filetype(ext)` | 扩展名 → `IMAGE/RAW/VIDEO/AUDIO/FILE`(查 `EXT_TO_TYPE`),未知扩展名返回空串 |
 | `collect_files_with_categories(...)` | 目录遍历与分类,返回 `(all, media, ignored)` |
 | `safe_relpath(path, start)` | 跨驱动器安全的相对路径 |
 | `prepare_rename_plan(...)` | 生成完整改名计划(排序/冲突/失败归集) |
