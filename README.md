@@ -24,10 +24,10 @@
 
 <table align="center">
   <tr>
-    <td align="center" width="20%"><img src="/images/1.png" alt="主界面" width="95%"></td>
-    <td align="center" width="20%"><img src="/images/2.png" alt="占位符列表" width="95%"></td>
-    <td align="center" width="20%"><img src="/images/3.png" alt="确认弹窗" width="95%"></td>
-    <td align="center" width="20%"><img src="/images/4.png" alt="命名结果" width="95%"></td>
+    <td align="center" width="20%"><img src="https://github.com/user-attachments/assets/001d68e2-f3e5-44b8-8ee4-d5fbdd115e37" alt="主界面" width="95%"></td>
+    <td align="center" width="20%"><img src="https://github.com/user-attachments/assets/24faf0dd-b80b-45cd-884c-5ca6dc505574" alt="占位符列表" width="95%"></td>
+    <td align="center" width="20%"><img src="https://github.com/user-attachments/assets/d9f19741-24bd-48be-b85d-1adb08ed5c21" alt="确认弹窗" width="95%"></td>
+    <td align="center" width="20%"><img src="https://github.com/user-attachments/assets/d6d1c579-6ca8-4697-ab99-75626b208ec6" alt="命名结果" width="95%"></td>
   </tr>
   <tr>
     <td align="center" width="20%"><sub style="color: #888;">主界面</sub></td>
