@@ -63,7 +63,7 @@
 
 如果你只是想使用工具，不需要修改源码，**推荐直接下载已打包好的 exe 文件**，无需安装 Python 环境以及依赖。
 
-1. 前往 [Releases 页面](https://github.com/DXVE/exif-renamer/releases)
+1. 前往 [Releases 页面](../../releases)
 2. 选择最新版本
 3. 下载以下编译好的文件：
    - **`exif_renamer-<版本号>.exe`** — 主程序
