@@ -520,6 +520,8 @@ def prepare_rename_plan(folder: str, all_files: list[str], media_files: list[str
     used_target_paths = set()
     existing_ids = set()
     created_dirs = set()
+    # {seq} 是整批递增的序号：每成功命名一个文件就前进一位，冲突时继续向后取号
+    local_seq = 1
 
     for (filepath, dt, ext, filetype, is_fallback, reason, original_mtime) in file_infos:
         if not os.path.exists(filepath):
@@ -537,8 +539,8 @@ def prepare_rename_plan(folder: str, all_files: list[str], media_files: list[str
         file_id = generate_unique_id(existing_ids)
         existing_ids.add(file_id)
 
-        local_seq = 1
         max_retries = 10000
+        retries = 0
         conflict_suffix = 1
 
         while True:
@@ -585,7 +587,8 @@ def prepare_rename_plan(folder: str, all_files: list[str], media_files: list[str
             if os.path.exists(new_path) or new_path in used_target_paths:
                 if has_seq:
                     local_seq += 1
-                    if local_seq > max_retries:
+                    retries += 1
+                    if retries > max_retries:
                         if log_func:
                             log_func(f"无法为 {filepath} 生成不冲突的序号（已达最大重试次数），跳过", "ERROR")
                         failed_analysis.append(filepath)
@@ -593,7 +596,8 @@ def prepare_rename_plan(folder: str, all_files: list[str], media_files: list[str
                     continue
                 else:
                     conflict_suffix += 1
-                    if conflict_suffix > max_retries:
+                    retries += 1
+                    if retries > max_retries:
                         if log_func:
                             log_func(f"无法为 {filepath} 生成不冲突的后缀（已达最大重试次数），跳过", "ERROR")
                         failed_analysis.append(filepath)
