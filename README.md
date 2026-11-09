@@ -93,15 +93,15 @@
 #### 安装依赖
 
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
 
-> `exifread` 为推荐依赖，可提升 RAW 和 HEIC 的 EXIF 解析精度，不安装仍可使用`Pillow` 读取基础 EXIF。
+> `exifread` 为默认依赖，可提升 RAW 和 HEIC 的 EXIF 解析精度，不安装仍可使用`Pillow` 读取基础 EXIF。PyInstaller 在 dev 组，`uv sync` 默认一并安装，用于本地打包 exe。
 
 #### 运行
 
 ```bash
-python src/exif_renamer.py
+uv run python src/exif_renamer.py
 ```
 
 ### 快速上手
@@ -136,7 +136,7 @@ python src/exif_renamer.py
 
 > 💡 日期解析支持多种格式：`YYYY:MM:DD HH:MM:SS`、`YYYY-MM-DD HH:MM:SS`、`YYYY/MM/DD`、ISO 8601 等，自动去除时区偏移。
 
-> 💡 强烈建议安装 `exifread`（`pip install exifread`），以提升 RAW 和 HEIC 的 EXIF 解析精度。
+> 💡 `exifread` 已随程序附带，用于提升 RAW 和 HEIC 的 EXIF 解析精度。
 
 ---
 
@@ -176,7 +176,7 @@ _示例输出基于 `2026年7月5日 14:30:45` 生成_
 
 检查是否安装了 `exifread`。部分手机拍摄的照片或社交平台下载的图片可能不包含标准 EXIF，此时工具会回退到文件修改时间。可以：
 
-1. 安装 `exifread`：`pip install exifread`
+1. 源码运行时确认已执行 `uv sync`（`exifread` 为默认依赖）；Release 版已内置
 2. 确认照片本身包含 EXIF（可使用```exif_debugger.py```程序进行确认）
 3. 对于确实没有 EXIF 的照片，工具会使用文件修改时间
 

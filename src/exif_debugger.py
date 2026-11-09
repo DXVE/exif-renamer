@@ -1,4 +1,4 @@
-# pip install pillow exifread
+# 依赖安装: uv sync（Pillow、exifread）
 
 import os
 import tkinter as tk

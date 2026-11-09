@@ -12,32 +12,40 @@ jobs:
   release:
     # Windows-only: PyInstaller 不能跨平台, Linux 跑不出 Windows exe
     runs-on: windows-latest
+    env:
+      # 控制台按 UTF-8 输出, 否则脚本里的中文在 CI 日志上会因默认代码页报 UnicodeEncodeError
+      PYTHONUTF8: '1'
     steps:
       - uses: actions/checkout@v7
 
-      - name: 设置 Python
-        uses: actions/setup-python@v7
+      - name: 安装 uv
+        uses: astral-sh/setup-uv@v10.3.0
         with:
-          # 本项目用 Python 3.14 (本地 venv 已验证)
-          python-version: '3.14'
+          # 与本地开发一致的 uv 版本, 避免 lock 解析差异
+          version: "0.13.1"
+          enable-cache: true
 
-      - name: 安装构建依赖
-        # 项目无 pyproject.toml, 采用 requirements.txt + pyinstaller
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
+      - name: 同步依赖
+        # 解释器与依赖由 uv 按 pyproject.toml 与 uv.lock 安装, dev 组含 PyInstaller
+        run: uv sync --locked
+
+      - name: 版本一致性检查(tag 与源码 __version__)
+        # 版本号唯一来源是 src/exif_renamer.py 的 __version__
+        shell: pwsh
+        env:
+          BUILD_TAG: ${{ github.ref_name }}
+        run: uv run python scripts/check_version.py --tag $env:BUILD_TAG
 
       - name: PyInstaller 打包 exe
         # 双 spec: exif_renamer.spec (主程序) + exif_debugger.spec (调试程序)
         # 各自独立 workpath 防止中间文件冲突, 共享 distpath
-        # 调试时本地单独跑: pyinstaller exif_renamer.spec
+        # 调试时本地单独跑: uv run pyinstaller exif_renamer.spec
         # WM_BUILD_TAG 产物名 = <脚本名>-<tag>.exe
         env:
           WM_BUILD_TAG: ${{ github.ref_name }}
         run: |
-          pyinstaller --workpath .pyi-build-renamer --distpath .pyi-dist exif_renamer.spec
-          pyinstaller --workpath .pyi-build-debugger --distpath .pyi-dist exif_debugger.spec
+          uv run pyinstaller --workpath .pyi-build-renamer --distpath .pyi-dist exif_renamer.spec
+          uv run pyinstaller --workpath .pyi-build-debugger --distpath .pyi-dist exif_debugger.spec
 
       - name: 验证产物
         shell: pwsh
@@ -49,6 +57,21 @@ jobs:
           }
           $files | Select-Object Name, @{N='Size_MB';E={[Math]::Round($_.Length/1MB,2)}}, LastWriteTime |
             Format-Table -AutoSize
+
+      - name: 启动冒烟(exe --version)
+        # 窗口程序没有 stdout, 用退出码判断: 0 表示 exe 能启动并走到版本分支
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem '.pyi-dist\exif_renamer-*.exe' | Select-Object -First 1
+          if (-not $exe) {
+            Write-Error "未找到主程序 exe"
+            exit 1
+          }
+          $proc = Start-Process -FilePath $exe.FullName -ArgumentList '--version' -Wait -PassThru
+          if ($proc.ExitCode -ne 0) {
+            Write-Error "exe --version 退出码 $($proc.ExitCode)"
+            exit 1
+          }
 
       - name: 清理同名 tag 的旧 release
         env:

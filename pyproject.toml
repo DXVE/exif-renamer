@@ -1,0 +1,18 @@
+[project]
+name = "exif-renamer"
+# 版本以源码 __version__ 与 git tag 为准，本字段仅满足 PEP 621 必填要求
+version = "0.0.0"
+description = "按 EXIF 拍摄时间批量重命名图片/视频的桌面工具"
+readme = "README.md"
+requires-python = ">=3.14"
+license = "MIT"
+dependencies = [
+    "Pillow>=9.0",
+    "exifread>=3.0.0",
+]
+
+[dependency-groups]
+# 仅构建期使用，uv sync 默认安装
+dev = [
+    "pyinstaller>=6.0",
+]

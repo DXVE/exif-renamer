@@ -4,7 +4,7 @@
 
 > 说明：本文件仅用于满足组件的署名与声明义务，各组件版权归其各自作者所有，本项目不对其作任何权利主张。
 >
-> 表中版本为整理时构建环境中的实际版本；本项目依赖只设下限、不锁定版本（见 `requirements.txt`），发布产物可能包含更新的上游版本，届时请以各上游仓库的许可文本为准。
+> 表中版本为整理时构建环境中的实际版本；本项目依赖由 `uv.lock` 锁定（声明见 `pyproject.toml`），发布产物按锁定版本构建，与表中版本不一致时以 `uv.lock` 为准。
 
 | 组件 | 版本 | 许可 | 随产物分发 |
 |---|---|---|---|
@@ -250,7 +250,7 @@ not linked into a combined executable.)
 |---|---|---|---|
 | pyinstaller-hooks-contrib | 2026.7 | GPL-2.0-or-later（stdhooks）/ Apache-2.0（runtime hooks） | https://github.com/pyinstaller/pyinstaller-hooks-contrib |
 
-该包是 PyInstaller 的官方依赖（由 `pip install pyinstaller` 自动带入），不单独使用，仅提供社区维护的补充 hooks。本项目的依赖不需要它：Pillow 的 hook 由 PyInstaller 自身内置（`PyInstaller/hooks/hook-PIL*.py`），exifread 为纯 Python、无需 hook；其 `rthooks`（runtime hooks，若触发则会随 exe 分发）在本项目依赖上均未触发。因此本程序的产物中不含该包的代码，不产生 GPL 分发义务。
+该包是 PyInstaller 的官方依赖（安装 PyInstaller 时自动带入），不单独使用，仅提供社区维护的补充 hooks。本项目的依赖不需要它：Pillow 的 hook 由 PyInstaller 自身内置（`PyInstaller/hooks/hook-PIL*.py`），exifread 为纯 Python、无需 hook；其 `rthooks`（runtime hooks，若触发则会随 exe 分发）在本项目依赖上均未触发。因此本程序的产物中不含该包的代码，不产生 GPL 分发义务。
 
 > PyInstaller 在构建期还会带入 `altgraph`、`pefile`、`pywin32-ctypes`、`packaging`、`setuptools` 等依赖，同样只在构建期使用，不随产物分发。
 

@@ -1,3 +1,6 @@
+# 版本号唯一来源：界面标题与发布 tag 校验均读取此常量
+__version__ = "1.0"
+
 import os
 import platform
 import queue
@@ -1073,7 +1076,7 @@ class ExifRenamer:
         self._splash_label = None
 
         self.root = tk.Tk()
-        self.root.title("Exif-Renamer · 文件批量重命名工具 · v1.0")
+        self.root.title(f"Exif-Renamer · 文件批量重命名工具 · v{__version__}")
 
         # 设置窗口图标 (左上角 + 任务栏)
         # iconphoto 加载 PNG (1024x1024 源, subsample 4 倍到 256x256)
@@ -1416,7 +1419,7 @@ class ExifRenamer:
         if EXIFREAD_AVAILABLE:
             text = f"✓ 当前使用 ExifRead {EXIFREAD_VERSION} 处理 (支持RAW/HEIC)"
         else:
-            text = "⚠ 当前使用 PIL 处理(基础EXIF支持，建议安装exifread，pip install exifread)"
+            text = "⚠ 当前使用 PIL 处理(基础EXIF支持，建议安装exifread，执行 uv sync)"
         try:
             self._status_label.config(text=text)
         except tk.TclError:
@@ -1648,6 +1651,10 @@ class ExifRenamer:
 
 
 def main():
+    if "--version" in sys.argv[1:]:  # 发布冒烟用：不建 GUI，打印版本后退出
+        if sys.stdout is not None:
+            print(f"v{__version__}")
+        return
     app = ExifRenamer()
     app.run()
 

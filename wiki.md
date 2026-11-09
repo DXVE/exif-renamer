@@ -182,21 +182,17 @@
 环境要求:Python 3.14+(开发与 CI 均使用 3.14)。主程序在 Windows 上获得完整支持;macOS/Linux 可运行基础功能。
 
 ```bash
-# 1) (建议) 创建虚拟环境
-python -m venv .venv
-# Windows: .venv\Scripts\activate     macOS/Linux: source .venv/bin/activate
+# 1) 安装依赖(uv 按 pyproject.toml + uv.lock 自动创建 .venv)
+uv sync
 
-# 2) 安装依赖
-pip install -r requirements.txt
+# 2) 运行主程序
+uv run python src/exif_renamer.py
 
-# 3) 运行主程序
-python src/exif_renamer.py
-
-# 4) 调试工具(可选,需已安装 Pillow 与 exifread)
-python src/exif_debugger.py
+# 3) 调试工具(可选,需已安装 Pillow 与 exifread)
+uv run python src/exif_debugger.py
 ```
 
-依赖清单(`requirements.txt`)只有两行:`Pillow>=9.0` 与 `exifread>=3.0.0`。二者都走惰性导入,详见下节。
+依赖声明在 `pyproject.toml`(`Pillow>=9.0`、`exifread>=3.0.0`),锁定版本见 `uv.lock`;PyInstaller 在 dev 组,`uv sync` 默认一并安装。二者都走惰性导入,详见下节。
 
 ### 3.2 依赖与惰性加载
 
@@ -236,8 +232,7 @@ spec 中值得注意的配置(两个 spec 结构相同,主程序额外把 `asset
 本地打包示例:
 
 ```bash
-pip install pyinstaller
-pyinstaller exif_renamer.spec            # 产物在当前目录 dist? 见下方说明
+uv run pyinstaller exif_renamer.spec            # 产物在当前目录 dist? 见下方说明
 ```
 
 > 说明:本地直接运行 spec 时,`workpath`/`distpath` 沿用 spec 默认值(分别为 `build/` 与 `dist/`,均已由 `.gitignore` 排除)。CI 则用 `--workpath`/`--distpath` 显式覆盖为 `.pyi-build-*/` 与 `.pyi-dist/`,避免两程序共享中间目录互相污染。
@@ -248,16 +243,19 @@ pyinstaller exif_renamer.spec            # 产物在当前目录 dist? 见下方
 
 `.github/workflows/release.yml` 定义自动发布,**仅 Windows**(注释明确说明 PyInstaller 不能跨平台产出 Windows exe)。触发方式:推送形如 `v*` 的 git tag。流程为:
 
-1. checkout → 安装 Python 3.14 → 安装 `requirements.txt` + `pyinstaller`;
-2. 用两个 spec 分别打包:`pyinstaller --workpath .pyi-build-renamer --distpath .pyi-dist exif_renamer.spec`,调试工具同理(`.pyi-build-debugger`),两者共享 `.pyi-dist` 输出;
+1. checkout → 安装 uv(版本与本地一致) → `uv sync --locked` 按 `pyproject.toml` 与 `uv.lock` 安装解释器与依赖(dev 组含 PyInstaller);
+2. 校验 git tag 与源码 `__version__` 是否一致(`scripts/check_version.py`),不一致即中止,不打包;
+3. 用两个 spec 分别打包:`uv run pyinstaller --workpath .pyi-build-renamer --distpath .pyi-dist exif_renamer.spec`,调试工具同理(`.pyi-build-debugger`),两者共享 `.pyi-dist` 输出;
    - `WM_BUILD_TAG=${{ github.ref_name }}` 注入产物名,即产物 = `<脚本名>-<tag>.exe`;
-3. 校验 `.pyi-dist` 下确有 exe 产物并打印体积;
-4. 用 `gh` 删除同名 tag 的旧 release(幂等,便于重发);
-5. 用 `softprops/action-gh-release` 上传全部 exe。
+4. 校验 `.pyi-dist` 下确有 exe 产物并打印体积;再对主程序执行 `--version` 启动冒烟(窗口程序无 stdout,以退出码判断);
+5. 用 `gh` 删除同名 tag 的旧 release(幂等,便于重发);
+6. 用 `softprops/action-gh-release` 上传全部 exe。
 
 源码 zip 由 GitHub 在每个 Release 页面自动生成「Source code (zip) / (tar.gz)」,与 `git archive` 产出等价,不再由 CI 单独打包。
 
-产物命名说明:产物名跟随 git tag,例如 `v1.0` tag 触发后产物为 `exif_renamer-v1.0.exe` 与 `exif_debugger-v1.0.exe`。tag 名即版本号。
+产物命名说明:产物名跟随 git tag,例如 `v1.0` tag 触发后产物为 `exif_renamer-v1.0.exe` 与 `exif_debugger-v1.0.exe`。
+
+版本号规则:源码顶部 `__version__` 是唯一来源,界面标题与发布门禁都读它;tag 必须等于 `v` + `__version__`(当前 `v1.0`)。发版顺序为先改 `__version__`、提交,再打对应 tag,否则流水线在门禁处中止。
 
 ### 3.5 环境变量
 
@@ -663,11 +661,15 @@ README 对此有面向用户的说明与免责表述(个人工具、不建议在
 ├── wiki.md                   本文档(面向开发者)
 ├── LICENSE                   本项目 MIT 许可证(含 AI 辅助生成内容附加说明)
 ├── THIRD_PARTY_LICENSES.md   第三方组件(pillow/exifread 等)版权声明与许可
-├── requirements.txt          依赖清单(Pillow、exifread)
+├── pyproject.toml           项目元数据与依赖声明(uv 入口,dev 组含 PyInstaller)
+├── uv.lock                  锁定版本(uv sync 按此重建环境)
+├── .python-version          固定 Python 解释器版本(3.14)
 ├── .gitignore                Python/venv/IDE/构建产物忽略
 ├── .gitattributes            换行符统一 + git archive 排除规则
 ├── exif_renamer.spec         PyInstaller spec(主程序)
 ├── exif_debugger.spec        PyInstaller spec(调试工具)
+├── scripts/
+│   └── check_version.py      发布门禁(tag 与源码 __version__ 一致性)
 ├── .github/
 │   └── workflows/
 │       └── release.yml       tag 触发的自动发布流水线(Windows)
@@ -737,7 +739,7 @@ README 对此有面向用户的说明与免责表述(个人工具、不建议在
 | 现象 | 可能原因与处置 |
 |---|---|
 | 打开立即闪退 / 无窗口 | 环境缺 Tk(Python 需带 Tk 支持);检查启动阶段异常输出;图标缺失不会闪退(有兜底) |
-| 状态栏提示"使用 PIL,建议安装 exifread" | 仅装了 Pillow。执行 `pip install exifread` 即可,无需重启代码逻辑(下次启动自动检测) |
+| 状态栏提示"使用 PIL,建议安装 exifread" | 仅装了 Pillow。执行 `uv sync` 重新同步依赖(`exifread` 为默认依赖)即可,无需重启代码逻辑(下次启动自动检测) |
 | 某些照片名字用了文件修改时间而非拍摄时间 | 该文件无标准 EXIF 或解析失败(可先用调试工具确认);属预期降级,会出现在告警弹窗的"备用时间源"列表 |
 | 处理中界面变慢/停顿 | 日志刷新与弹窗在主线程;文件量极大(上万)时日志密集会卡顿,属已知边界(README FAQ 亦有说明),建议分批 |
 | 点"开始"后按钮保持"处理中..."且无日志 | worker 正在等待弹窗应答而弹窗未出现?检查是否有旧任务残留(每次开始会清队列);或目录超大扫描未完成,看日志进度 |
