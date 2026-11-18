@@ -243,13 +243,14 @@ uv run pyinstaller exif_renamer.spec            # 产物在当前目录 dist? �
 
 `.github/workflows/release.yml` 定义自动发布,**仅 Windows**(注释明确说明 PyInstaller 不能跨平台产出 Windows exe)。触发方式:推送形如 `v*` 的 git tag。流程为:
 
-1. checkout → 安装 uv(版本与本地一致) → `uv sync --locked` 按 `pyproject.toml` 与 `uv.lock` 安装解释器与依赖(dev 组含 PyInstaller);
-2. 校验 git tag 与源码 `__version__` 是否一致(`scripts/check_version.py`),不一致即中止,不打包;
+1. checkout(完整历史与 tag,供生成更新日志)→ 校验 git tag 与源码 `__version__`(`scripts/check_version.py`,只依赖标准库,不装依赖即可运行,版本写错立即中止);
+2. 安装 uv(版本与本地一致)→ `uv sync --locked` 按 `pyproject.toml` 与 `uv.lock` 安装解释器与依赖(dev 组含 PyInstaller);
 3. 用两个 spec 分别打包:`uv run pyinstaller --workpath .pyi-build-renamer --distpath .pyi-dist exif_renamer.spec`,调试工具同理(`.pyi-build-debugger`),两者共享 `.pyi-dist` 输出;
    - `WM_BUILD_TAG=${{ github.ref_name }}` 注入产物名,即产物 = `<脚本名>-<tag>.exe`;
 4. 校验 `.pyi-dist` 下确有 exe 产物并打印体积;再对主程序执行 `--version` 启动冒烟(窗口程序无 stdout,以退出码判断);
-5. 用 `gh` 删除同名 tag 的旧 release(幂等,便于重发);
-6. 用 `softprops/action-gh-release` 上传全部 exe。
+5. 生成更新日志:取上一个 tag 到本次 tag 之间的提交标题(`- %s`,按时间正序)作为 Release 正文;没有更早的 tag 时列出全量提交并标注「首个版本」;
+6. 用 `gh` 删除同名 tag 的旧 release(幂等,便于重发);
+7. 用 `softprops/action-gh-release` 上传全部 exe,正文取自上一步的 `release-notes.md`。
 
 源码 zip 由 GitHub 在每个 Release 页面自动生成「Source code (zip) / (tar.gz)」,与 `git archive` 产出等价,不再由 CI 单独打包。
 

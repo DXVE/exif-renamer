@@ -17,6 +17,16 @@ jobs:
       PYTHONUTF8: '1'
     steps:
       - uses: actions/checkout@v7
+        with:
+          # 生成更新日志需要完整历史与 tag, 默认浅克隆取不到上一个 tag
+          fetch-depth: 0
+
+      - name: 版本一致性检查(tag 与源码 __version__)
+        # 版本号唯一来源是 src/exif_renamer.py 的 __version__; 脚本仅用标准库, 在装依赖前即可跑完, 版本写错立即失败
+        shell: pwsh
+        env:
+          BUILD_TAG: ${{ github.ref_name }}
+        run: python scripts/check_version.py --tag $env:BUILD_TAG
 
       - name: 安装 uv
         uses: astral-sh/setup-uv@v10.3.0
@@ -28,13 +38,6 @@ jobs:
       - name: 同步依赖
         # 解释器与依赖由 uv 按 pyproject.toml 与 uv.lock 安装, dev 组含 PyInstaller
         run: uv sync --locked
-
-      - name: 版本一致性检查(tag 与源码 __version__)
-        # 版本号唯一来源是 src/exif_renamer.py 的 __version__
-        shell: pwsh
-        env:
-          BUILD_TAG: ${{ github.ref_name }}
-        run: uv run python scripts/check_version.py --tag $env:BUILD_TAG
 
       - name: PyInstaller 打包 exe
         # 双 spec: exif_renamer.spec (主程序) + exif_debugger.spec (调试程序)
@@ -73,6 +76,26 @@ jobs:
             exit 1
           }
 
+      - name: 生成更新日志
+        # 取上一个 tag 到本次 tag 之间的提交标题作为 Release 正文, 无历史 tag 时列出全部提交
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          # Windows runner 默认按 OEM 代码页解码 git 输出, 中文标题会乱码
+          [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+          $prev = git describe --tags --abbrev=0 "$tag^" 2>$null
+          if ($prev) {
+            $range = "$prev..$tag"
+            $title = "$prev → $tag"
+          } else {
+            $range = $tag
+            $title = "首个版本 $tag"
+          }
+          # 原生命令输出是数组, 直接插值会用空格拼接, 这里显式按行合并
+          $lines = (git log $range --no-merges --reverse --pretty=format:"- %s") -join "`n"
+          if (-not $lines) { $lines = "- 无提交标题" }
+          Set-Content -LiteralPath "$env:RUNNER_TEMP/release-notes.md" -Value "## $title`n`n$lines" -Encoding utf8
+
       - name: 清理同名 tag 的旧 release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -99,3 +122,4 @@ jobs:
         with:
           files: |
             .pyi-dist/*.exe
+          body_path: ${{ runner.temp }}/release-notes.md
