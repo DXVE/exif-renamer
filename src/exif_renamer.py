@@ -1,6 +1,7 @@
 # 版本号唯一来源：界面标题与发布 tag 校验均读取此常量
-__version__ = "1.0"
+__version__ = "1.1"
 
+import hashlib
 import os
 import platform
 import queue
@@ -18,7 +19,7 @@ from tkinter import ttk, filedialog, scrolledtext
 # 默认配置 —— GUI 启动时的初始值，用户可在界面中覆盖
 DEFAULT_SOURCE_FOLDER = os.path.expanduser(r"~\Pictures\Screenshots")
 DEFAULT_PREFIX = "screenshot"
-DEFAULT_TEMPLATE = "{prefix}-{YYYY}-{MM}-{DD}-{hh}{mm}-{id}"
+DEFAULT_TEMPLATE = "{prefix}-{YYYY}-{MM}-{DD}-{hh}{mm}-{cid}"
 DEFAULT_RECURSIVE = False
 DEFAULT_COPY_TO_NEW = False
 DEFAULT_IMAGE_CHECKED = True
@@ -302,8 +303,27 @@ def generate_unique_id(existing_ids: set[str]) -> str:
     raise RuntimeError("无法生成唯一ID：已用尽所有重试次数")
 
 
+CONTENT_ID_CHARS = string.ascii_uppercase + string.digits
+CONTENT_ID_LENGTH = 4
+
+
+def generate_content_id(filepath: str, length: int = CONTENT_ID_LENGTH) -> str:
+    """按文件内容哈希生成稳定 ID：仅改动路径不影响结果，字节变化则 ID 随之变化"""
+    digest = hashlib.blake2b(digest_size=8)
+    with open(filepath, 'rb') as f:
+        for chunk in iter(lambda: f.read(1 << 20), b''):
+            digest.update(chunk)
+    value = int.from_bytes(digest.digest(), 'big') % (len(CONTENT_ID_CHARS) ** length)
+    chars = []
+    for _ in range(length):
+        value, rem = divmod(value, len(CONTENT_ID_CHARS))
+        chars.append(CONTENT_ID_CHARS[rem])
+    return ''.join(reversed(chars))
+
+
 def apply_template(template: str, dt: datetime,
-                   prefix: str, file_id: str, seq: int, filetype: str) -> str:
+                   prefix: str, file_id: str, seq: int, filetype: str,
+                   content_id: str = "") -> str:
     """将模板中的占位符替换为实际值，生成文件名"""
     repl = {
         "{YYYY}": dt.strftime("%Y"),
@@ -316,6 +336,7 @@ def apply_template(template: str, dt: datetime,
         "{prefix}": prefix,
         "{filetype}": filetype,
         "{id}": file_id,
+        "{cid}": content_id,
     }
     result = template
     for k, v in repl.items():
@@ -484,6 +505,8 @@ def prepare_rename_plan(folder: str, all_files: list[str], media_files: list[str
         return plan
 
     has_seq = bool(re.search(r"\{seq(?::[^}]+)?\}", template))
+    has_cid = "{cid}" in template
+    has_id = "{id}" in template
 
     file_infos = []
     fallback_files = []
@@ -507,7 +530,8 @@ def prepare_rename_plan(folder: str, all_files: list[str], media_files: list[str
         file_infos.append((filepath, dt, ext, filetype, is_fallback, reason, original_mtime))
         if is_fallback:
             fallback_files.append(filepath)
-            preview_name = apply_template(template, dt, prefix, "A1B2", 1, filetype)
+            preview_name = apply_template(template, dt, prefix, "A1B2", 1, filetype,
+                                          "A1B2" if has_cid else "")
             preview_name = sanitize_filename(preview_name) + ext
             fallback_previews[filepath] = {'preview': preview_name, 'reason': reason}
             if log_func:
@@ -546,13 +570,27 @@ def prepare_rename_plan(folder: str, all_files: list[str], media_files: list[str
         retries = 0
         conflict_suffix = 1
 
+        content_id = ""
+        if has_cid:
+            try:
+                content_id = generate_content_id(filepath)
+            except OSError as e:
+                failed_analysis.append(filepath)
+                if log_func:
+                    log_func(f"无法读取文件内容生成内容哈希ID: {e}", "WARNING")
+                continue
+
+        file_id = generate_unique_id(existing_ids) if has_id else ""
+        if has_id:
+            existing_ids.add(file_id)
+
         while True:
             if has_seq:
                 seq = local_seq
             else:
                 seq = 1
 
-            base = apply_template(template, dt, prefix, file_id, seq, filetype)
+            base = apply_template(template, dt, prefix, file_id, seq, filetype, content_id)
             base = sanitize_filename(base)
 
             if not has_seq and conflict_suffix > 1:
@@ -1353,7 +1391,7 @@ class ExifRenamer:
             ("{YYYY}", "年(四位)"), ("{YY}", "年(两位)"), ("{MM}", "月"), ("{DD}", "日"),
             ("{hh}", "时"), ("{mm}", "分"), ("{ss}", "秒"),
             ("{prefix}", "自定义前缀"), ("{filetype}", "文件类型"),
-            ("{id}", "四位随机ID"), ("{seq}", "顺序编号(1 2 3 4)"),
+            ("{id}", "四位随机ID"), ("{cid}", "四位内容哈希ID(重命名后不变)"), ("{seq}", "顺序编号(1 2 3 4)"),
             ("{seq:03d}", "顺序编号(001 002 003 004)"),
             ("{seq:04d}", "顺序编号(0001 0002)(位数可自定义)")
         ]
@@ -1477,7 +1515,8 @@ class ExifRenamer:
             self.prefix_var.get(),
             "A1B2",
             123,
-            "IMAGE"
+            "IMAGE",
+            "A1B2"
         )
         self.preview_var.set(f"{name}.jpg")
 

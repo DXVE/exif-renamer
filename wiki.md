@@ -255,7 +255,7 @@ uv run pyinstaller exif_renamer.spec            # 产物在当前目录 dist? �
 
 产物命名说明:产物名跟随 git tag,例如 `v1.0` tag 触发后产物为 `exif_renamer-v1.0.exe` 与 `exif_debugger-v1.0.exe`。
 
-版本号规则:源码顶部 `__version__` 是唯一来源,界面标题与发布门禁都读它;tag 必须等于 `v` + `__version__`(当前 `v1.0`)。发版顺序为先改 `__version__`、提交,再打对应 tag,否则流水线在门禁处中止。
+版本号规则:源码顶部 `__version__` 是唯一来源,界面标题与发布门禁都读它;tag 必须等于 `v` + `__version__`(当前 `v1.1`)。发版顺序为先改 `__version__`、提交,再打对应 tag,否则流水线在门禁处中止。
 
 ### 3.5 环境变量
 
@@ -368,7 +368,7 @@ EXIF DateTimeOriginal → Image DateTime → EXIF DateTimeDigitized
 
 `apply_template` 按顺序执行:
 
-1. 替换**固定占位符**(一次性替换表):`{YYYY}` `{YY}` `{MM}` `{DD}` `{hh}` `{mm}` `{ss}`(24 小时制)、`{prefix}`、`{filetype}`(输出 `IMAGE` / `RAW` / `VIDEO` / `AUDIO`,自定义类型为 `FILE`)、`{id}`;
+1. 替换**固定占位符**(一次性替换表):`{YYYY}` `{YY}` `{MM}` `{DD}` `{hh}` `{mm}` `{ss}`(24 小时制)、`{prefix}`、`{filetype}`(输出 `IMAGE` / `RAW` / `VIDEO` / `AUDIO`,自定义类型为 `FILE`)、`{id}`、`{cid}`;
 2. 正则处理**序号占位符** `{seq}` 与 `{seq:<fmt>}`(如 `{seq:04d}`),`<fmt>` 交给 `format(seq, fmt)`,非法格式回退为纯数字字符串;
 3. 移除**所有残余**形如 `{...}` 的内容——即未识别占位符会被静默剔除,模板写错不会报错。
 
@@ -402,7 +402,16 @@ EXIF DateTimeOriginal → Image DateTime → EXIF DateTimeDigitized
 
 模板含 `{id}` 时,每个文件在计划生成阶段调用 `generate_unique_id(existing_ids)` 拿到一个随机 ID(大写字母 + 数字),保证同批内 ID 唯一:默认 4 位,若 4 位空间被耗尽(同一批超过约 160 万个随机组合仍冲突的概率场景)自动扩位到最多 8 位;单长度内重试上限 10 万次,全部耗尽抛 `RuntimeError`。
 
-#### 4.4.5 计划阶段的失败归集(`failed_analysis`)
+#### 4.4.5 内容哈希 ID(`{cid}`)
+
+模板含 `{cid}` 时,计划生成阶段对每个文件调用 `generate_content_id`,以 BLAKE2b 分块读取整个文件内容(1 MiB/块),取 64 位摘要后按 36 进制映射为 4 位大写字母+数字。同一文件在任意批次、任意时刻得到同一个值,与文件名、路径、批次组成无关,可直接当作图片标识:
+
+- 重命名、移动、复制(`copy2`)不改字节,ID 不变,重复运行得到同一目标名,计划阶段即判定"无需更改";
+- 文件字节变化(重新导出、改写 EXIF、转格式)后 ID 随之改变,视为不同内容;
+- 不做批内去重:4 位仅 36⁴ 个取值,不同文件可能撞同一值,由文件名中的时间戳段与冲突后缀承担最终唯一性;
+- 生成发生在排序后的改名循环内,若模板同时含 `{id}` 与 `{cid}`,两者独立取值;模板不含任何 ID 占位符时不会读取文件内容。
+
+#### 4.4.6 计划阶段的失败归集(`failed_analysis`)
 
 以下情形文件**不进** `rename_map`,而是记入 `failed_analysis`(最终在完成弹窗中展示,不执行任何改名):
 
@@ -523,7 +532,7 @@ worker 侧的**请求-应答循环**与之配对:发请求后进入 `while True`
 | 目标文件夹 | 空(复制模式开启后必填) |
 | 包含子文件夹 | 关 |
 | 前缀 | `screenshot` |
-| 模板 | `{prefix}-{YYYY}-{MM}-{DD}-{hh}{mm}-{id}` |
+| 模板 | `{prefix}-{YYYY}-{MM}-{DD}-{hh}{mm}-{cid}` |
 | 勾选类型 | 图像、视频 开;RAW、音频、自定义 关 |
 
 模板占位符全集(含「插入占位符」菜单中的中文说明):
@@ -536,6 +545,7 @@ worker 侧的**请求-应答循环**与之配对:发请求后进入 `while True`
 | `{prefix}` | 前缀输入框的值 |
 | `{filetype}` | 类型标签:`IMAGE`/`RAW`/`VIDEO`/`AUDIO`(自定义类型为 `FILE`,见 [§6.2](#62-扩展名矩阵)) |
 | `{id}` | 4–8 位随机大写字母+数字,批内唯一 |
+| `{cid}` | 4 位内容哈希大写字母+数字,重命名后不变(见 [§4.4.5](#445-内容哈希-idcid)) |
 | `{seq}` | 序号 `1,2,3,…` |
 | `{seq:0Nd}` | 补零序号,如 `{seq:03d}`→`001`;`<fmt>` 任意合法 format 说明符 |
 
